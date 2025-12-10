@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartID - Setup</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div id="loader-overlay">
+            <div class="spinner"></div>
+            <p>Securely encrypting your ID...</p>
+        </div>
+
+        <h1>SmartID Verification</h1>
+        <p>Step 2: Biometric Setup<br>Please upload your MyKad / ID photo for facial matching.</p>
+        
+        <form id="uploadForm">
+            <div class="upload-area" id="drop-area">
+                <i class="fas fa-id-card upload-icon"></i>
+                <h3 style="margin:0; font-size:16px;">Tap to Upload ID</h3>
+                <div id="file-name">Supports JPG, PNG</div>
+                <input type="file" name="ic_image" id="fileInput" accept="image/*" style="display:none" required>
+            </div>
+            
+            <button type="submit" class="btn">Continue to Face Scan</button>
+        </form>
+        
+        <div style="margin-top: 20px; font-size: 12px; color: #aaa;">
+            <i class="fas fa-lock"></i> End-to-end encrypted biometric storage
+        </div>
+    </div>
+
+    <script>
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('file-name');
+        const form = document.getElementById('uploadForm');
+        const loader = document.getElementById('loader-overlay');
+
+        // Click to open file dialog
+        dropArea.addEventListener('click', () => fileInput.click());
+
+        // Update file name on selection
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileName.textContent = "Selected: " + fileInput.files[0].name;
+                dropArea.style.borderColor = "#005eb8";
+                dropArea.style.backgroundColor = "#f0f7ff";
+            }
+        });
+
+        // AJAX Upload to show loading screen
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if(fileInput.files.length === 0) {
+                alert("Please select an ID photo first.");
+                return;
+            }
+
+            loader.style.display = 'flex'; // Show loader
+
+            const formData = new FormData(form);
+            fetch('/upload_ic', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    window.location.href = data.redirect;
+                } else {
+                    alert("Error: " + data.message);
+                    loader.style.display = 'none';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Upload failed.");
+                loader.style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>
