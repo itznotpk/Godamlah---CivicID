@@ -6,12 +6,21 @@ import base64
 import time
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from deepface import DeepFace
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-# Replace with your actual URI
-DB_URI = "postgres://avnadmin:AVNS_wSQi-mmxoN8CP5T-0d5@pg-1de2613d-godamlah-facial-recognition.h.aivencloud.com:16358/defaultdb?sslmode=require"
+# 3. Read the secret from the file instead of hardcoding it
+DB_URI = os.getenv("DATABASE_URL") 
+
+# Safety Check: Stop the app immediately if the file is missing or empty
+if not DB_URI:
+    raise ValueError("❌ Error: DATABASE_URL is missing! Did you create the .env file?")
+
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 MODEL_NAME = "Facenet512"
@@ -85,11 +94,26 @@ def success_page():
 def process_frame():
     try:
         data = request.json['image']
+        
+        # Check if data exists
+        if not data or ',' not in data:
+             return jsonify({"status": "error", "message": "Invalid image data"})
+
         image_data = data.split(',')[1]
         decoded_image = base64.b64decode(image_data)
         np_arr = np.frombuffer(decoded_image, np.uint8)
+
+        # --- FIX: Stop crash if buffer is empty ---
+        if np_arr.size == 0:
+            return jsonify({"status": "error", "message": "Camera not ready (Empty Frame)"})
+
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
+        # Double check if decoding worked
+        if frame is None:
+             return jsonify({"status": "error", "message": "Could not decode image"})
+
+        # ... (Rest of your code: Face Detection, Embedding, DB Check) ...
         haar_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = haar_cascade.detectMultiScale(gray_img, 1.05, minNeighbors=2, minSize=(100,100))
