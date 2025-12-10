@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartID - Verify</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Face Verification</h2>
+        <div class="status-pill" id="status-badge">Ready to Scan</div>
+
+        <div class="camera-wrapper">
+            <video id="video" autoplay playsinline></video>
+            <div class="scan-laser" id="laser" style="display:none;"></div>
+        </div>
+
+        <p style="margin-bottom:15px;">Position your face within the frame.</p>
+
+        <div class="loading-container" id="loading-container">
+            <div class="loading-bar" id="loading-bar"></div>
+        </div>
+
+        <button id="scanBtn" class="btn"><i class="fas fa-camera"></i> Verify Identity</button>
+        <button onclick="history.back()" class="btn btn-secondary">Go Back</button>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const scanBtn = document.getElementById('scanBtn');
+        const statusBadge = document.getElementById('status-badge');
+        const laser = document.getElementById('laser');
+        const loadingContainer = document.getElementById('loading-container');
+        const loadingBar = document.getElementById('loading-bar');
+
+        // Start Camera
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { 
+                statusBadge.textContent = "Camera Blocked";
+                statusBadge.classList.add('fail');
+            });
+
+        function animateLoadingBar(duration) {
+            loadingContainer.style.display = 'block';
+            loadingBar.style.width = '0%';
+            setTimeout(() => { loadingBar.style.width = '90%'; }, 100); // Fast start
+        }
+
+        scanBtn.addEventListener('click', () => {
+            // 1. SAFETY CHECK: Ensure camera is actually ready
+            // This prevents the "Assertion failed !buf.empty()" crash
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                alert("Camera is loading... please wait a moment.");
+                return;
+            }
+
+            // 2. UI Updates (Start animations)
+            scanBtn.disabled = true;
+            scanBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            statusBadge.textContent = "Analyzing Biometrics...";
+            statusBadge.className = "status-pill processing";
+            laser.style.display = 'block';
+            animateLoadingBar();
+
+            // 3. Capture Frame
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            // 4. Send to Backend
+            fetch('/process_frame', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingBar.style.width = '100%'; // Complete animation
+                laser.style.display = 'none';    // Hide laser
+                
+                if (data.status === "success") {
+                    // --- SUCCESS ---
+                    statusBadge.textContent = "Verified!";
+                    statusBadge.className = "status-pill success";
+                    // Slight delay so user sees the green "Verified" badge
+                    setTimeout(() => { window.location.href = data.redirect; }, 1000);
+
+                } else {
+                    // --- FAIL ---
+                    // Handle cases where score might be missing (e.g., "No face detected")
+                    let scoreText = data.score !== undefined ? `(${data.score}%)` : "";
+                    let errorMsg = data.message || "Match Failed";
+
+                    statusBadge.textContent = `${errorMsg} ${scoreText}`;
+                    statusBadge.className = "status-pill fail";
+                    
+                    // Reset UI to try again
+                    scanBtn.disabled = false;
+                    scanBtn.innerHTML = '<i class="fas fa-redo"></i> Try Again';
+                    loadingContainer.style.display = 'none';
+                }
+            })
+            .catch(err => {
+                // --- SYSTEM ERROR (Network/Server crash) ---
+                console.error(err);
+                statusBadge.textContent = "System Connection Error";
+                statusBadge.className = "status-pill fail";
+                
+                laser.style.display = 'none';
+                loadingContainer.style.display = 'none';
+                scanBtn.disabled = false;
+                scanBtn.innerHTML = 'Try Again';
+            });
+        });
+    </script>
+</body>
+</html>
